@@ -1,0 +1,3 @@
+- MetricPanel on Liens carries no `data-tour` because DataTable already emits `tracker-table` for the tour target; duplicating it would make the target ambiguous.
+- Disbursement countdown uses calendar-day difference from today so lien 5208 shows exactly "3 days left" on a fresh demo, matching the brief's seeded deadline offset of +3 days.
+- Discrepancies uses the archetype's "inline panel" option for the record detail rather than `RecordDrawer`: the panel opens above the table and closes on "Move to release review", so no overlay can ever sit between the visitor and the lien rows.

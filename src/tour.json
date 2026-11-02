@@ -1,0 +1,66 @@
+[
+  {
+    "id": "meet-marcus",
+    "screen_id": "story",
+    "route": "/",
+    "target": "story-panel",
+    "title": "Meet Marcus",
+    "body": "Marcus reconciles and releases every settled lien for a 4-clinic injury practice. Here is his Tuesday before and after this desk."
+  },
+  {
+    "id": "all-liens",
+    "screen_id": "liens",
+    "route": "/liens",
+    "target": "tracker-table",
+    "title": "Every lien in one list",
+    "body": "Attorney, lien holder, billed total, payments posted and balance for every lien, settled ones first. Click a row to open the ledger."
+  },
+  {
+    "id": "lien-ledger",
+    "screen_id": "lien-case",
+    "route": "/lien-case",
+    "target": "case-timeline",
+    "title": "The lien's full history",
+    "body": "From the signed LOP to the posted check, every step and note on the lien in order, so nobody has to dig through email."
+  },
+  {
+    "id": "short-payment",
+    "screen_id": "discrepancies",
+    "route": "/discrepancies",
+    "target": "denial-row-5208",
+    "title": "A short payment, caught first",
+    "body": "Lien 5208 was paid $6,200 on an $11,400 bill with no reduction on file. It is flagged before any release goes out."
+  },
+  {
+    "id": "disbursement-countdown",
+    "screen_id": "discrepancies",
+    "route": "/discrepancies",
+    "target": "appeal-countdown",
+    "title": "Days left before disbursement",
+    "body": "The countdown shows when the attorney plans to pay out the settlement, so the most urgent lien is fixed first."
+  },
+  {
+    "id": "human-release",
+    "screen_id": "releases",
+    "route": "/releases",
+    "target": "approval-queue-item",
+    "title": "Marcus approves, then the release goes out",
+    "body": "No balance is written off and no release letter reaches a law firm until Marcus approves it."
+  },
+  {
+    "id": "what-it-costs",
+    "screen_id": "costs",
+    "route": "/costs",
+    "target": "savings-calculator",
+    "title": "What this work costs today",
+    "body": "Put in your own settled-lien volume and coordinator rate to compare today's cost with the desk."
+  },
+  {
+    "id": "how-it-works",
+    "screen_id": "architecture",
+    "route": "/architecture",
+    "target": "architecture-diagram",
+    "title": "How it would be built",
+    "body": "Click any box to see what it does, what data passes through it and whether it stores patient data. A real build reads the EHR ledger and runs in the practice's own cloud."
+  }
+]
