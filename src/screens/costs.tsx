@@ -1,9 +1,17 @@
 import { AppShell, SavingsCalculator } from "@kit";
-import { shellProps } from "./shared";
+import { NAV } from "../nav";
+import { BRAND, PERSONA_NAME, PERSONA_ROLE } from "../seed";
 
 export default function Costs() {
   return (
-    <AppShell {...shellProps}>
+    <AppShell
+      brandName={BRAND.name}
+      brandUrl={BRAND.url}
+      brandEmail={BRAND.email}
+      personaName={PERSONA_NAME}
+      personaRole={PERSONA_ROLE}
+      nav={NAV}
+    >
       <h1 className="text-2xl" style={{ fontFamily: "var(--pf-font-heading)" }}>
         What this work costs today
       </h1>

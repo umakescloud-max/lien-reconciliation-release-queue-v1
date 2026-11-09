@@ -3,18 +3,19 @@ import type { DemoConfig } from "@kit";
 import { SAMPLE_MANIFEST } from "./samples.generated";
 
 export const DEMO_CONFIG: DemoConfig = { ...{
-  "storageKey": "lien-reconciliation-release-queue-v1-b10",
+  "storageKey": "lien-reconciliation-release-queue-v1-b13",
   "ctaUrl": "https://umakes.cloud",
   "galleryUrl": "https://umakescloud-max.github.io/",
   "tasks": [
     {
-      "id": "open-a-lien",
-      "title": "Open a lien ledger",
-      "instruction": "On Liens, click any row to open its ledger and history.",
-      "screen_id": "liens",
-      "completes_on": "open-lien",
+      "id": "check-closing-statement",
+      "title": "Check a closing statement",
+      "instruction": "On Closing statements, open lien 5163 and click Flag statement mismatch. You can use the sample document.",
+      "screen_id": "closing",
+      "completes_on": "flag-statement-mismatch",
       "tour_step_ids": [
-        "all-liens"
+        "closing-statements",
+        "statement-mismatch"
       ]
     },
     {
@@ -80,6 +81,15 @@ export const DEMO_CONFIG: DemoConfig = { ...{
       "record_id": "5208",
       "result": "Read the reduction request: $6,200 offered on an $11,400 bill, above the practice's $6,000 floor. Matched to lien 5208; the reason now reads 'Reduction requested, within floor'.",
       "completes_on": "attach-reduction-letter"
+    },
+    {
+      "id": "closing-statement-5163",
+      "title": "Draft final closing statement, lien 5163",
+      "kind": "form",
+      "screen_id": "closing",
+      "record_id": "5163",
+      "result": "Read the draft closing statement: Larkfield listed at $4,100, but the signed lien resolution on file is $4,600. Lien 5163 is flagged and added to Discrepancies.",
+      "completes_on": "flag-statement-mismatch"
     }
   ],
   "costs": {
@@ -89,6 +99,6 @@ export const DEMO_CONFIG: DemoConfig = { ...{
     "minutes_with_tool": 12,
     "hourly_rate": 23,
     "staff_label": "Lien and LOP coordinator",
-    "assumption": "Most of today's 40 minutes is matching emails to ledgers and typing release letters; the desk matches payments to balances and leaves only the mismatches."
+    "assumption": "Most of today's 40 minutes is matching emails and closing statements to ledgers and typing letters; the desk does the matching and leaves only the mismatches."
   }
 }, sampleManifest: SAMPLE_MANIFEST };

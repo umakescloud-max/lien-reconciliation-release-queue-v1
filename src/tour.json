@@ -24,6 +24,22 @@
     "body": "From the signed LOP to the posted check, every step and note on the lien in order, so nobody has to dig through email."
   },
   {
+    "id": "closing-statements",
+    "screen_id": "closing",
+    "route": "/closing",
+    "target": "closing-table",
+    "title": "Every closing statement, checked",
+    "body": "When a firm sends its draft closing statement, the amount it lists for the practice is compared with the ledger and the signed lien resolution. Proposals and signed resolutions are tracked here too."
+  },
+  {
+    "id": "statement-mismatch",
+    "screen_id": "closing",
+    "route": "/closing",
+    "target": "closing-row-5163",
+    "title": "A statement that lists too little",
+    "body": "The draft statement for lien 5163 lists $4,100 for the practice, but the signed resolution says $4,600. Marcus flags it before the firm disburses."
+  },
+  {
     "id": "short-payment",
     "screen_id": "discrepancies",
     "route": "/discrepancies",

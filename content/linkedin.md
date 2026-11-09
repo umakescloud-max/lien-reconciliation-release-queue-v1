@@ -1,17 +1,17 @@
-Settled liens get released against short checks, and the difference is written off without anyone approving it.
+A closing statement lists less for the practice than the signed lien resolution, and nobody catches it until the firm has disbursed.
 
-I built a concept prototype of a lien reconciliation and release desk for injury practices.
+I built a closing desk into my lien reconciliation prototype for injury practices.
 
-It lists every lien with its attorney, lien holder, billed total, payments posted and balance.
-It flags settled liens where the payment, attorney or lien holder does not match, with the days left before the firm's disbursement deadline.
-Nothing is written off and no release letter goes to a law firm until the coordinator clicks approve.
+When a law firm sends its draft final closing statement, the desk shows it next to the ledger and the signed lien resolution. You see the gross settlement, attorney fee, case costs and other liens, plus a countdown to the day the firm disburses.
 
-Try the demo case: lien 5208, a $6,200 check on an $11,400 bill, no reduction on file, 3 days to disbursement. Attach the attorney's reduction letter, send it to release review, approve it.
+In the demo, the statement for lien 5163 lists $4,100 for the practice. The signed resolution says $4,600. One click flags it to Discrepancies before the firm pays out. The desk also shows which liens have a reduction proposal out and which have a signed resolution.
 
+Nothing is written off and no release goes out until the lien coordinator approves it.
+
+Try it:
 https://umakescloud-max.github.io/lien-reconciliation-release-queue-v1/
 
 This is a concept prototype with synthetic data. A real build runs on the practice's own cloud, HIPAA-ready, and the practice owns it.
 
-If your team fights this every week, book a free workflow audit at umakes.cloud or reply to umakescloud@gmail.com
-
+If your team fights this every week, book a free workflow audit at umakes.cloud or reply to umakescloud@gmail.com.
 #PersonalInjury #RevenueCycle #HealthcareOperations

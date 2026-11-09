@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   AppShell,
@@ -7,249 +7,250 @@ import {
   Masked,
   StatusPill,
   Timeline,
+  businessDaysBetween,
+  formatDate,
   formatDateTime,
   useActivity,
   useDemoState,
-  type TimelineEntry,
 } from "@kit";
-import { LIENS_SEED, LIEN_NOTES, type Lien, type LienNote } from "../seed";
+import { NAV } from "../nav";
 import {
-  caseStageLabel,
-  caseStageTone,
+  BRAND,
+  EDGE_LIEN_ID,
+  LIENS_SEED,
+  NOTES_SEED,
+  PERSONA_NAME,
+  PERSONA_ROLE,
+  SERVICE_LINES_SEED,
   daysLabel,
-  lienStatusLabel,
-  lienStatusTone,
-  paymentPayer,
-  shellProps,
+  stageLabel,
+  statusLabel,
   usd,
-} from "./shared";
+  type Lien,
+  type LienNote,
+} from "../seed";
+
+// Timeline dates carry the year, so a lien's history reads unambiguously.
+function timelineStamp(value: Date): string {
+  return new Date(value).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 
 export default function LienCase() {
   const [params] = useSearchParams();
-  const caseId = params.get("case") ?? "5208";
-  const { logAction } = useActivity();
+  const requestedId = params.get("case") ?? EDGE_LIEN_ID;
   const [liens, setLiens] = useDemoState<Lien[]>("liens", LIENS_SEED);
-  const [notes, setNotes] = useDemoState<LienNote[]>("lien-notes", LIEN_NOTES);
+  const [notes, setNotes] = useDemoState<LienNote[]>("lienNotes", NOTES_SEED);
+  const { logAction } = useActivity();
+  const [noteText, setNoteText] = useState("");
 
-  const lien = liens.find((row) => row.id === caseId) ?? liens[0];
+  const lien = liens.find((l) => l.lien_id === requestedId) ?? liens.find((l) => l.lien_id === EDGE_LIEN_ID);
+  if (!lien) return null;
 
-  const entries: TimelineEntry[] = useMemo(() => {
-    const items: { at: Date; entry: TimelineEntry }[] = [];
-    const lienNotes = notes.filter((note) => note.lien_id === lien.id);
+  const deadlineDays = lien.disbursement_deadline
+    ? businessDaysBetween(new Date(), new Date(lien.disbursement_deadline))
+    : null;
 
-    for (const note of lienNotes) {
-      const at = new Date(note.timestamp);
-      items.push({
-        at,
-        entry: {
-          id: note.id,
-          timestamp: formatDateTime(at),
-          author: note.author,
-          text: note.note_text,
-        },
-      });
-    }
+  const entries = notes
+    .filter((n) => n.lien_id === lien.lien_id)
+    .slice()
+    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .map((n) => ({
+      id: n.note_id,
+      timestamp: timelineStamp(n.timestamp),
+      author: n.author,
+      text: n.note_text,
+    }));
 
-    const billedAt = new Date(lien.date_of_injury);
-    billedAt.setDate(billedAt.getDate() + 30);
-    billedAt.setHours(13, 0, 0, 0);
-    items.push({
-      at: billedAt,
-      entry: {
-        id: `case-billed-${lien.id}`,
-        timestamp: formatDateTime(billedAt),
-        author: "Renata Ilves",
-        text: "Services billed: itemized charges posted to the ledger.",
-      },
-    });
-
-    if (
-      lien.payment_posted_date &&
-      !lienNotes.some((note) => note.note_text.startsWith("Payment posted"))
-    ) {
-      const at = new Date(lien.payment_posted_date);
-      items.push({
-        at,
-        entry: {
-          id: `case-payment-${lien.id}`,
-          timestamp: formatDateTime(at),
-          author: "Joaquin Reyes",
-          text: `Payment posted: ${usd(lien.payments_posted)} from ${paymentPayer(lien)}.`,
-        },
-      });
-    }
-
-    if (lien.release_date) {
-      const at = new Date(lien.release_date);
-      items.push({
-        at,
-        entry: {
-          id: `case-release-${lien.id}`,
-          timestamp: formatDateTime(at),
-          author: "Marcus Odum",
-          text: `Lien release sent to ${lien.attorney_firm}.`,
-        },
-      });
-    }
-
-    items.sort((a, b) => a.at.getTime() - b.at.getTime());
-    return items.map((item) => item.entry);
-  }, [lien, notes]);
+  const serviceLines = SERVICE_LINES_SEED[lien.lien_id] ?? [];
 
   const addNote = () => {
-    const now = new Date();
-    setNotes((previous) => [
-      ...previous,
-      {
-        id: `note-added-${lien.id}-${now.getTime()}`,
-        lien_id: lien.id,
-        author: "Marcus Odum",
-        timestamp: now,
-        note_text: "Note added from the lien desk.",
-      },
-    ]);
+    const text =
+      noteText.trim() || `Note added from the lien desk at ${formatDateTime(new Date())}.`;
+    const entry: LienNote = {
+      note_id: `LN-live-${Date.now()}`,
+      lien_id: lien.lien_id,
+      author: PERSONA_NAME,
+      timestamp: new Date(),
+      note_text: text,
+    };
+    setNotes((prev) => [entry, ...prev]);
+    setNoteText("");
     logAction("Note added to the lien", "add-lien-note");
   };
 
-  const sendBalance = () => {
+  const sendItemizedBalance = () => {
     const now = new Date();
-    setLiens((previous) =>
-      previous.map((row) =>
-        row.id === lien.id ? { ...row, last_attorney_contact: now } : row,
-      ),
+    const entry: LienNote = {
+      note_id: `LN-live-${Date.now()}`,
+      lien_id: lien.lien_id,
+      author: PERSONA_NAME,
+      timestamp: now,
+      note_text: `Itemized balance of ${usd(lien.lien_balance)} sent to ${lien.attorney_firm}.`,
+    };
+    setNotes((prev) => [entry, ...prev]);
+    setLiens((prev) =>
+      prev.map((l) => (l.lien_id === lien.lien_id ? { ...l, last_attorney_contact: now } : l))
     );
-    setNotes((previous) => [
-      ...previous,
-      {
-        id: `note-sent-${lien.id}-${now.getTime()}`,
-        lien_id: lien.id,
-        author: "Marcus Odum",
-        timestamp: now,
-        note_text: `Itemized balance of ${usd(lien.lien_balance)} sent to ${lien.attorney_firm}.`,
-      },
-    ]);
     logAction("Itemized lien balance sent to attorney", "send-itemized-balance");
   };
 
   return (
-    <AppShell {...shellProps}>
-      <p className="text-sm text-[var(--pf-muted)]">{lien.patient_name}</p>
-      <h1 className="mt-1 text-2xl" style={{ fontFamily: "var(--pf-font-heading)" }}>
-        Lien {lien.id} ledger
-      </h1>
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-[var(--pf-muted)]">
-        <StatusPill label={lienStatusLabel(lien.lien_status)} tone={lienStatusTone(lien.lien_status)} />
-        <StatusPill label={caseStageLabel(lien.case_stage)} tone={caseStageTone(lien.case_stage)} />
-        <span>{lien.attorney_firm}</span>
-        <span>{lien.lien_holder}</span>
+    <AppShell
+      brandName={BRAND.name}
+      brandUrl={BRAND.url}
+      brandEmail={BRAND.email}
+      personaName={PERSONA_NAME}
+      personaRole={PERSONA_ROLE}
+      nav={NAV}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm text-[var(--pf-muted)]">Lien {lien.lien_id}</p>
+          <h1 className="text-2xl" style={{ fontFamily: "var(--pf-font-heading)" }}>
+            {lien.patient_name}
+          </h1>
+          <p className="mt-1 text-sm text-[var(--pf-muted)]">
+            {lien.attorney_firm} — {lien.attorney_contact}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusPill label={statusLabel(lien.lien_status)} tone={lien.lien_status === "discrepancy" ? "accent" : "primary"} />
+          <StatusPill label={stageLabel(lien.case_stage)} tone="muted" />
+        </div>
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-2">
-        <section>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg" style={{ fontFamily: "var(--pf-font-heading)" }}>
-              Lien history
-            </h2>
-            <button
-              type="button"
-              data-action="add-lien-note"
-              onClick={addNote}
-              className="rounded-lg border border-[var(--pf-muted)]/30 px-3 py-1.5 text-sm"
-            >
-              Add note
-            </button>
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-xl border border-[var(--pf-muted)]/20 p-4">
+          <p className="text-xs text-[var(--pf-muted)]">Billed total</p>
+          <p className="mt-1 text-xl" style={{ fontFamily: "var(--pf-font-heading)" }}>{usd(lien.billed_total)}</p>
+        </div>
+        <div className="rounded-xl border border-[var(--pf-muted)]/20 p-4">
+          <p className="text-xs text-[var(--pf-muted)]">Payments posted</p>
+          <p className="mt-1 text-xl" style={{ fontFamily: "var(--pf-font-heading)" }}>{usd(lien.payments_posted)}</p>
+          <p className="mt-1 text-xs text-[var(--pf-muted)]">
+            {lien.payment_posted_date ? `Posted ${formatDate(new Date(lien.payment_posted_date))}` : "No payment posted"}
+          </p>
+        </div>
+        <div className="rounded-xl border border-[var(--pf-muted)]/20 p-4">
+          <p className="text-xs text-[var(--pf-muted)]">Lien balance</p>
+          <p className="mt-1 text-xl" style={{ fontFamily: "var(--pf-font-heading)" }}>{usd(lien.lien_balance)}</p>
+        </div>
+        <div className="rounded-xl border border-[var(--pf-muted)]/20 p-4">
+          <p className="text-xs text-[var(--pf-muted)]">
+            {lien.lien_status === "released" ? "Release" : "Disbursement"}
+          </p>
+          {lien.lien_status === "released" ? (
+            <>
+              <p className="mt-1 text-xl" style={{ fontFamily: "var(--pf-font-heading)" }}>
+                Released {lien.release_date ? formatDate(new Date(lien.release_date)) : ""}
+              </p>
+              <p className="mt-1 text-xs text-[var(--pf-muted)]">Release letter sent to the firm</p>
+            </>
+          ) : (
+            <>
+              <p className="mt-1 text-xl" style={{ fontFamily: "var(--pf-font-heading)" }}>
+                {deadlineDays === null
+                  ? "None set"
+                  : deadlineDays >= 0
+                    ? daysLabel(deadlineDays)
+                    : `${Math.abs(deadlineDays)} days past`}
+              </p>
+              <p className="mt-1 text-xs text-[var(--pf-muted)]">
+                {lien.disbursement_deadline ? `Deadline ${formatDate(new Date(lien.disbursement_deadline))}` : "No attorney deadline"}
+              </p>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <div className="space-y-4">
+          <h2 className="text-lg" style={{ fontFamily: "var(--pf-font-heading)" }}>Itemized ledger</h2>
+          <DocumentViewer
+            title="Services billed"
+            lines={[
+              ...serviceLines.map(
+                (line) =>
+                  `${new Date(line.service_date).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                  })}: ${line.label} (${line.code}) ${usd(line.amount)}`
+              ),
+              `Billed total ${usd(lien.billed_total)}`,
+              `Payments posted ${usd(lien.payments_posted)}`,
+              `Lien balance ${usd(lien.lien_balance)}`,
+              `Settlement reported ${lien.settlement_amount_reported ? usd(lien.settlement_amount_reported) : "Not reported"}`,
+            ]}
+          />
+          <DocumentViewer
+            title="Practice reduction floor"
+            field="reduction_floor"
+            lines={[`Lowest total the practice will accept: ${usd(lien.reduction_floor)}`]}
+          />
+          <div className="rounded-xl border border-[var(--pf-muted)]/20 p-4 text-sm">
+            <p className="font-medium">Treatment summary</p>
+            <p className="mt-1 text-[var(--pf-muted)]">
+              <Masked field="treatment_summary">{lien.treatment_summary}</Masked>
+            </p>
           </div>
+          {lien.discrepancy_reason && (
+            <div className="rounded-lg bg-[var(--pf-accent)] px-4 py-3 text-[var(--pf-ink)]">
+              <p className="text-sm font-medium">Flagged for review</p>
+              <p className="mt-1 text-sm">{lien.discrepancy_reason}</p>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <h2 className="text-lg" style={{ fontFamily: "var(--pf-font-heading)" }}>Lien history</h2>
           <div className="mt-4">
             <Timeline entries={entries} dataTour="case-timeline" />
           </div>
-        </section>
-
-        <aside className="space-y-4">
-          <DocumentViewer
-            title="Itemized ledger"
-            lines={[
-              `Billed total: ${usd(lien.billed_total)}`,
-              `Payments posted: ${usd(lien.payments_posted)}`,
-              `Open balance: ${usd(lien.lien_balance)}`,
-              `Requested reduction: ${
-                lien.requested_reduction === null
-                  ? "None on file"
-                  : usd(lien.requested_reduction)
-              }`,
-              `Settlement reported: ${
-                lien.settlement_amount_reported === null
-                  ? "Not yet reported"
-                  : usd(lien.settlement_amount_reported)
-              }`,
-            ]}
-          />
-
-          <DocumentViewer
-            title="Treatment summary"
-            field="treatment_summary"
-            lines={[lien.treatment_summary]}
-          />
-
-          <div className="rounded-xl border border-[var(--pf-muted)]/20 p-4">
-            <h2 className="text-sm font-medium">Lien details</h2>
-            <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-[var(--pf-muted)]">Attorney contact</dt>
-                <dd>{lien.attorney_contact}</dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Date of injury</dt>
-                <dd>{lien.date_of_injury.toLocaleDateString()}</dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Injury</dt>
-                <dd>{lien.injury_type}</dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Payment posted</dt>
-                <dd>
-                  {lien.payment_posted_date
-                    ? lien.payment_posted_date.toLocaleDateString()
-                    : "No payment posted"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Disbursement deadline</dt>
-                <dd>{daysLabel(lien.disbursement_deadline)}</dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Reduction floor</dt>
-                <dd>
-                  <Masked field="reduction_floor">{usd(lien.reduction_floor)}</Masked>
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Last attorney contact</dt>
-                <dd>{lien.last_attorney_contact.toLocaleDateString()}</dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Discrepancy reason</dt>
-                <dd>{lien.discrepancy_reason || "None on file"}</dd>
-              </div>
-            </dl>
-            <button
-              type="button"
-              data-action="send-itemized-balance"
-              onClick={sendBalance}
-              className="mt-4 rounded-lg bg-[var(--pf-primary)] px-3 py-1.5 text-sm font-medium text-[var(--pf-surface)]"
-            >
-              Send itemized balance to attorney
-            </button>
-          </div>
-
-          <div>
-            <h2 className="text-sm font-medium">Actions on this lien</h2>
-            <div className="mt-2">
-              <AuditLog />
-            </div>
-          </div>
-        </aside>
+        </div>
       </div>
+
+      <div className="mt-6 flex flex-wrap items-end gap-3">
+        <label className="block min-w-0 flex-1">
+          <span className="text-sm font-medium">Add a note</span>
+          <input
+            type="text"
+            value={noteText}
+            onChange={(e) => setNoteText(e.target.value)}
+            placeholder="What happened on this lien?"
+            className="mt-1 w-full rounded-lg border border-[var(--pf-muted)]/30 bg-[var(--pf-surface)] px-3 py-2 text-sm"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={addNote}
+          data-action="add-lien-note"
+          className="rounded-lg bg-[var(--pf-primary)] px-4 py-2 text-sm font-medium text-[var(--pf-surface)]"
+        >
+          Add note
+        </button>
+        <button
+          type="button"
+          onClick={sendItemizedBalance}
+          data-action="send-itemized-balance"
+          className="rounded-lg border border-[var(--pf-muted)]/30 px-4 py-2 text-sm"
+        >
+          Send itemized balance to attorney
+        </button>
+      </div>
+
+      <section className="mt-8">
+        <h2 className="text-lg" style={{ fontFamily: "var(--pf-font-heading)" }}>Actions on this demo</h2>
+        <div className="mt-3">
+          <AuditLog />
+        </div>
+      </section>
     </AppShell>
   );
 }

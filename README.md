@@ -1,59 +1,67 @@
 # Lien reconciliation and release desk for an injury practice
 
-Every settled injury lien is checked against what was actually paid, and short payments are flagged before any lien release goes out.
+Every settled injury lien is checked against what was paid and what the closing statement says, before any lien release goes out.
+
+## What's new
+
+The desk now has a closing desk. When a law firm sends its draft final closing statement, you see it next to the practice's ledger balance, reduction floor and signed lien resolution, along with the days left before the firm disburses. You can flag a mismatch to Discrepancies before the money goes out. To try it, open lien 5163: the statement lists $4,100 for the practice, but the signed resolution says $4,600.
 
 ![Lien reconciliation and release desk for an injury practice](cover.png)
 
 ## Who has this problem
 
-Injury-first practices paid through PIP, letters of protection and workers' comp. Picture a multi-specialty group with orthopedics, spine, pain and physical therapy across four clinics: about 1,900 active injury cases and about 30 settled lien accounts to reconcile and release each week.
+Injury-first practices: orthopedics, spine, interventional pain, physiatry and physical therapy, paid mostly through PIP, letters of protection and workers' comp. Picture a practice with four clinics, about 1,900 active injury cases and about 30 settled liens to reconcile and release each week.
 
-The lien and LOP coordinator gets settlement notices, reduction requests and release requests by email and fax. Each one gets matched to the patient ledger in the EHR by hand. The coordinator compares the posted check with the billed total, works out whether a reduction was agreed, and types the release letter from a Word template. Status lives in a spreadsheet and an inbox.
+That work usually falls to one lien and LOP coordinator. Settlement notices, reduction requests, closing statements and release requests arrive by email and fax. The coordinator matches each one to the patient ledger in the EHR, compares the posted check with the billed total, works out whether a reduction was agreed, and types the release letter from a Word template. Status lives in a spreadsheet and an inbox.
 
 What goes wrong:
 
-- Nobody has one list of which settled liens are paid in full, short-paid or still waiting on a check.
-- Short payments are found after the release letter has gone out, so the difference is written off without anyone approving it. One release sent against a $6,200 check on an $11,400 bill writes off $5,200 that nobody approved.
+- No single list shows which settled liens are paid in full, short-paid or still waiting on a check.
+- Short payments are found after the release letter has gone out, so the difference gets written off without anyone approving it.
 - Liens sold to a funder are sometimes released without the funder's sign-off.
+- A closing statement can list less for the practice than the signed lien resolution, and nobody notices until the firm has disbursed.
 - Attorneys wait days for a release and call to ask, which strains the referral relationship.
 
-At about 40 minutes per settled lien and 30 a week, that is roughly 20 coordinator hours a week.
+At about 40 minutes per settled lien and 30 liens a week, that is roughly 20 coordinator hours a week. One release sent against a $6,200 check on an $11,400 bill writes off $5,200 that nobody approved.
 
 ## What you can try
 
-The Start here screen lists four tasks. Each one ticks off when you finish it.
+The Start here screen lists four tasks. Each one ticks Done when you finish it.
 
-- **Open a lien ledger:** on Liens, click any row to see that lien's ledger and history, from the signed LOP to the posted check.
-- **Fix the short-paid lien:** on Discrepancies, open lien 5208 ($6,200 paid on an $11,400 bill, flagged "Payment short of balance, no reduction on file", 3 days to the firm's disbursement deadline) and attach the attorney's reduction letter.
+- **Check a closing statement:** on Closing statements, open lien 5163 and click Flag statement mismatch. The firm's draft lists $4,100 for the practice against a signed resolution of $4,600, so the lien goes to Discrepancies with its disbursement countdown.
+- **Fix the short-paid lien:** on Discrepancies, open lien 5208 (a $6,200 check on an $11,400 bill, no reduction on file) and attach the attorney's reduction letter. The reason changes to "Reduction requested, within floor".
 - **Send it to release review:** still on lien 5208, click Move to release review.
-- **Approve the release:** on Release review, check lien 5208 and click Approve and send release. Nothing is written off and no release goes to a law firm until you click.
+- **Approve the release:** on Release review, check lien 5208's ledger, payment and reduction against the practice's $6,000 floor, then click Approve and send release.
 
-Also in the app:
+Also in the demo:
 
-- **Sample document:** the attorney's lien reduction request for lien 5208. Use it in one click or download it and upload it. The desk matches it to the lien and notes that the $6,200 offer is above the practice's $6,000 floor.
-- **Role switcher:** switch between Lien and LOP coordinator, Billing and Attorney's view. Billing does not see the treatment summary. The attorney's view sees neither the treatment summary nor the practice's reduction floor.
-- **Cost calculator:** enter your own settled-lien volume, minutes per lien and coordinator rate to compare today's cost with the desk.
+- **Sample documents:** the attorney's reduction request for lien 5208 and the draft closing statement for lien 5163. Download one and drop it in, or click to use it directly.
+- **Role switcher:** view the desk as the lien coordinator, as Billing (treatment summary hidden) or as the attorney (treatment summary and reduction floor hidden).
+- **Cost calculator:** enter your own settled-lien volume, minutes per lien and coordinator rate to compare today's time with the desk.
 - **How it works:** a clickable diagram. Click any box to see what it does, what data passes through it and whether it holds patient data.
+
+A guided tour walks through every screen, starting with Marcus, a fictional lien coordinator, and his Tuesday before and after the desk.
 
 ## How it's built
 
-A browser-only React + TypeScript + Tailwind app on the Umakes kit. All data is synthetic seed data: 140 liens, 70 payments and 320 lien notes across six invented law firms and one invented lien funder. State is kept in your browser, and Reset demo puts everything back.
+This is a browser-only React + TypeScript + Tailwind app built on the Umakes kit. It runs on synthetic seed data: 140 liens, 70 payments, 30 draft closing statements and 320 lien notes, all invented. The Liens screen computes its metrics from that data: open lien balance, discrepancies due in 5 days, releases waiting on approval, and average days from payment to release.
 
-It was built and checked by the Umakes App Factory: automated gates for build, routes, layout and accessibility, then a reviewer that uses the app the way a first-time visitor would, working through every task, the tour and each button.
+The Umakes App Factory built and checked it. Automated gates ran first, then a reviewer used the app the way a first-time visitor would and reported what worked and what did not.
 
-The architecture screen shows where each piece of a real build would run: the law firm inbox, the EHR and billing ledger, the lien desk, an AI document reader that sees letter text only, the Microsoft Office release letter templates, the coordinator, the referring law firms and the lien funder.
+The How it works screen shows the architecture: the law firm inbox and the EHR ledger feed the lien desk, a document reader pulls amounts, firm and deadline from letters and statements, the coordinator approves, and the release letter goes out to the law firm.
 
 ## What a production version adds
 
-- **Real integrations:** charges and posted payments read from the practice's EHR and billing ledger, settlement and reduction letters pulled from the law firm email and fax inbox, release letters filled from the practice's Microsoft Office templates, and status shared with the lien funder on purchased liens.
-- **HIPAA controls:** role-based access, audit logs on every action, encryption in transit and at rest, and BAAs with every vendor that touches patient data. The document reader sees letter text only, never the chart.
-- **Deployment on the client's own cloud:** it runs in the practice's own Google Cloud (GCP) account.
+- **Real integrations:** the practice's EHR and billing ledger for charges and posted payments, the law firm email and fax inbox, an AI document reader for settlement letters, reduction requests and closing statements, Microsoft Office templates for reduction proposals and release letters, and status updates to the lien funder on purchased liens.
+- **HIPAA controls:** role-based access, audit logs on every action, encryption in transit and at rest, and signed BAAs with every vendor that touches patient data. The document reader sees letter and statement text only, never the chart.
+- **Deployment on the client's own cloud:** it runs in the practice's own GCP account.
 - **Client ownership:** the practice owns the code, the data and the deployment.
+- **No money moves on its own:** the desk flags mismatches, and every reduction and release waits for the coordinator's approval.
 
 ## Try it
 
 https://umakescloud-max.github.io/lien-reconciliation-release-queue-v1/
 
-This is a concept prototype with synthetic data. No real patients, practices or law firms are in it. A real build runs on the client's own cloud, HIPAA-ready, and the client owns it.
+This is a concept prototype built on synthetic data. No real patients, practices or law firms are in it. A real build runs on the client's own cloud, HIPAA-ready, and the client owns it.
 
 If your team fights this every week, book a free workflow audit at umakes.cloud or reply to umakescloud@gmail.com.

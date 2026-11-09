@@ -5,197 +5,232 @@ import {
   DataTable,
   MetricPanel,
   StatusPill,
+  businessDaysBetween,
+  formatDate,
   useActivity,
   useDemoState,
-  type DataTableColumn,
   type StatTileProps,
+  type StatusTone,
 } from "@kit";
-import { LIENS_SEED, type Lien } from "../seed";
+import { NAV } from "../nav";
 import {
-  caseStageLabel,
-  caseStageTone,
+  BRAND,
+  LIENS_SEED,
+  PERSONA_NAME,
+  PERSONA_ROLE,
   daysLabel,
-  daysUntil,
-  lienStatusLabel,
-  lienStatusTone,
-  shellProps,
+  stageLabel,
+  statusLabel,
   usd,
   usdCompact,
-} from "./shared";
+  type CaseStage,
+  type Lien,
+  type LienStatus,
+} from "../seed";
+
+const STAGE_ORDER: Record<CaseStage, number> = {
+  settled: 0,
+  paid: 0,
+  "in litigation": 1,
+  "demand sent": 2,
+  treating: 3,
+};
+
+function statusTone(status: LienStatus): StatusTone {
+  if (status === "discrepancy") return "accent";
+  if (status === "release review") return "primary";
+  if (status === "released") return "primary";
+  return "muted";
+}
+
+function daysToDeadline(lien: Lien): number | null {
+  if (!lien.disbursement_deadline) return null;
+  return businessDaysBetween(new Date(), new Date(lien.disbursement_deadline));
+}
 
 export default function Liens() {
-  const navigate = useNavigate();
-  const { logAction } = useActivity();
   const [liens] = useDemoState<Lien[]>("liens", LIENS_SEED);
   const [settledOnly, setSettledOnly] = useState(false);
+  const navigate = useNavigate();
+  const { logAction } = useActivity();
 
-  const metrics: StatTileProps[] = useMemo(() => {
-    const open = liens.filter((lien) => lien.lien_status !== "released");
-    const openBalance = open.reduce((sum, lien) => sum + lien.lien_balance, 0);
-
-    const dueSoon = liens.filter((lien) => {
-      if (lien.lien_status !== "discrepancy") return false;
-      const days = daysUntil(lien.disbursement_deadline);
+  const metrics = useMemo<StatTileProps[]>(() => {
+    const open = liens.filter((l) => l.lien_status !== "released");
+    const openBalance = open.reduce((sum, l) => sum + l.lien_balance, 0);
+    const dueInFive = liens.filter((l) => {
+      if (l.lien_status !== "discrepancy") return false;
+      const days = daysToDeadline(l);
       return days !== null && days >= 0 && days <= 5;
     }).length;
-
-    const waiting = liens.filter((lien) => lien.lien_status === "release review").length;
-
+    const waiting = liens.filter((l) => l.lien_status === "release review").length;
     const released = liens.filter(
-      (lien) => lien.lien_status === "released" && lien.release_date && lien.payment_posted_date,
+      (l) => l.lien_status === "released" && l.release_date && l.payment_posted_date
     );
-    const averageDays =
-      released.length === 0
-        ? 0
-        : released.reduce((sum, lien) => {
-            const paid = (lien.payment_posted_date as Date).getTime();
-            const out = (lien.release_date as Date).getTime();
-            return sum + (out - paid) / 86_400_000;
-          }, 0) / released.length;
+    const avgDays = released.length
+      ? Math.round(
+          released.reduce(
+            (sum, l) =>
+              sum +
+              Math.round(
+                (new Date(l.release_date as Date).getTime() -
+                  new Date(l.payment_posted_date as Date).getTime()) /
+                  86400000
+              ),
+            0
+          ) / released.length
+        )
+      : 0;
 
     return [
       {
         label: "Open lien balance",
         value: usdCompact(openBalance),
-        hint: `${usd(openBalance)} across liens not yet released`,
+        hint: `Across ${open.length} liens not yet released`,
       },
       {
         label: "Discrepancies due in 5 days",
-        value: String(dueSoon),
-        hint: "Settled liens with a disbursement deadline this week",
+        value: String(dueInFive),
+        hint: "Discrepancy liens with a deadline in the next 5 business days",
       },
       {
         label: "Releases waiting on approval",
         value: String(waiting),
-        hint: "In the release review queue",
+        hint: "Reduction and release decisions waiting on Marcus",
       },
       {
         label: "Average days from payment to release",
-        value: `${averageDays.toFixed(1)} days`,
-        hint: "Across every released lien",
+        value: `${avgDays}`,
+        hint: "Calendar days from payment posted to release date",
       },
     ];
   }, [liens]);
 
-  const rows = settledOnly
-    ? liens.filter((lien) => lien.case_stage === "settled" || lien.case_stage === "paid")
-    : liens;
-
-  const columns: DataTableColumn<Lien>[] = [
-    {
-      key: "id",
-      header: "Lien",
-      render: (lien) => (
-        <div>
-          <p className="font-medium">Lien {lien.id}</p>
-          <p className="text-xs text-[var(--pf-muted)]">{lien.patient_name}</p>
-        </div>
-      ),
-    },
-    {
-      key: "attorney_firm",
-      header: "Referring firm",
-      render: (lien) => lien.attorney_firm,
-    },
-    {
-      key: "lien_holder",
-      header: "Lien holder",
-      render: (lien) => lien.lien_holder,
-    },
-    {
-      key: "case_stage",
-      header: "Case stage",
-      render: (lien) => (
-        <StatusPill label={caseStageLabel(lien.case_stage)} tone={caseStageTone(lien.case_stage)} />
-      ),
-    },
-    {
-      key: "billed_total",
-      header: "Billed",
-      render: (lien) => usd(lien.billed_total),
-    },
-    {
-      key: "payments_posted",
-      header: "Payments posted",
-      render: (lien) => usd(lien.payments_posted),
-    },
-    {
-      key: "lien_balance",
-      header: "Balance",
-      render: (lien) => usd(lien.lien_balance),
-    },
-    {
-      key: "lien_status",
-      header: "Lien status",
-      render: (lien) => (
-        <StatusPill label={lienStatusLabel(lien.lien_status)} tone={lienStatusTone(lien.lien_status)} />
-      ),
-    },
-    {
-      key: "treatment_summary",
-      header: "Treatment",
-      render: (lien) => lien.treatment_summary,
-    },
-    {
-      key: "days_left",
-      header: "Disbursement",
-      render: (lien) => daysLabel(lien.disbursement_deadline),
-    },
-  ];
+  const rows = useMemo(() => {
+    const filtered = settledOnly
+      ? liens.filter((l) => l.case_stage === "settled" || l.case_stage === "paid")
+      : liens;
+    return [...filtered].sort((a, b) => STAGE_ORDER[a.case_stage] - STAGE_ORDER[b.case_stage]);
+  }, [liens, settledOnly]);
 
   return (
-    <AppShell {...shellProps}>
-      <h1 className="text-2xl" style={{ fontFamily: "var(--pf-font-heading)" }}>
-        Liens
-      </h1>
-      <p className="mt-2 max-w-2xl text-[var(--pf-muted)]">
-        Every open lien and every recent release, with settled accounts first. Click a row to open
-        the ledger and history.
-      </p>
+    <AppShell
+      brandName={BRAND.name}
+      brandUrl={BRAND.url}
+      brandEmail={BRAND.email}
+      personaName={PERSONA_NAME}
+      personaRole={PERSONA_ROLE}
+      nav={NAV}
+    >
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl" style={{ fontFamily: "var(--pf-font-heading)" }}>
+            Liens
+          </h1>
+          <p className="mt-1 max-w-2xl text-sm text-[var(--pf-muted)]">
+            Every open and recently released lien with its attorney, lien holder, billed total,
+            payments posted and balance. Settled liens come first.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setSettledOnly(true);
+            logAction("Showing settled liens only", "filter-by-stage");
+          }}
+          data-action="filter-by-stage"
+          aria-pressed={settledOnly}
+          className="rounded-lg border border-[var(--pf-muted)]/30 px-3 py-2 text-sm"
+        >
+          Show settled only
+        </button>
+      </div>
 
       <div className="mt-6">
         <MetricPanel metrics={metrics} />
       </div>
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          data-action="filter-by-stage"
-          onClick={() => {
-            setSettledOnly(true);
-            logAction("Showing settled liens only", "filter-by-stage");
-          }}
-          className="rounded-lg border border-[var(--pf-muted)]/30 px-3 py-1.5 text-sm"
-        >
-          Show settled only
-        </button>
-        {settledOnly && (
-          <button
-            type="button"
-            onClick={() => setSettledOnly(false)}
-            className="text-sm text-[var(--pf-muted)] underline"
-          >
-            Show all liens
-          </button>
-        )}
-        <span className="text-sm text-[var(--pf-muted)]">
-          {rows.length} lien{rows.length === 1 ? "" : "s"} shown
-        </span>
-      </div>
-
-      <div className="mt-4">
+      <div className="mt-6">
         <DataTable
-          columns={columns}
+          columns={[
+            {
+              key: "lien_id",
+              header: "Lien and patient",
+              render: (row) => (
+                <span>
+                  <span className="font-medium">{row.patient_name}</span>
+                  <span className="block text-xs text-[var(--pf-muted)]">Lien {row.lien_id}</span>
+                </span>
+              ),
+            },
+            {
+              key: "attorney_firm",
+              header: "Attorney firm",
+              render: (row) => row.attorney_firm,
+            },
+            {
+              key: "lien_holder",
+              header: "Lien holder",
+              render: (row) => row.lien_holder,
+            },
+            {
+              key: "case_stage",
+              header: "Case stage",
+              render: (row) => stageLabel(row.case_stage),
+            },
+            {
+              key: "billed_total",
+              header: "Billed",
+              render: (row) => usd(row.billed_total),
+            },
+            {
+              key: "payments_posted",
+              header: "Payments",
+              render: (row) => usd(row.payments_posted),
+            },
+            {
+              key: "lien_balance",
+              header: "Balance",
+              render: (row) => usd(row.lien_balance),
+            },
+            {
+              key: "lien_status",
+              header: "Lien status",
+              render: (row) => <StatusPill label={statusLabel(row.lien_status)} tone={statusTone(row.lien_status)} />,
+            },
+            {
+              key: "deadline",
+              header: "Disbursement",
+              render: (row) => {
+                if (row.lien_status === "released") {
+                  return (
+                    <span className="text-[var(--pf-muted)]">
+                      {row.release_date
+                        ? `Released ${formatDate(new Date(row.release_date))}`
+                        : "Released"}
+                    </span>
+                  );
+                }
+                const days = daysToDeadline(row);
+                if (days === null) return <span className="text-[var(--pf-muted)]">No deadline</span>;
+                return <span>{daysLabel(days)} left</span>;
+              },
+            },
+            {
+              key: "treatment_summary",
+              header: "Treatment",
+              render: (row) => row.treatment_summary,
+            },
+          ]}
           rows={rows}
-          rowKey={(lien) => lien.id}
-          dataTour="tracker-table"
-          mobileStatusKey="lien_status"
-          mobileUrgencyKey="days_left"
-          rowActionId="open-lien"
-          onRowClick={(lien) => {
+          rowKey={(row) => row.lien_id}
+          onRowClick={(row) => {
             logAction("Opened lien ledger", "open-lien");
-            navigate(`/lien-case?case=${lien.id}`);
+            navigate(`/lien-case?case=${row.lien_id}`);
           }}
+          dataTour="tracker-table"
+          rowActionId="open-lien"
+          mobileStatusKey="lien_status"
+          mobileUrgencyKey="deadline"
         />
       </div>
     </AppShell>

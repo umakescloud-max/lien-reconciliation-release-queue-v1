@@ -3,6 +3,7 @@ export const routes: { id: string; path: string }[] = [
   { id: "story", path: "/" },
   { id: "liens", path: "/liens" },
   { id: "lien-case", path: "/lien-case" },
+  { id: "closing", path: "/closing" },
   { id: "discrepancies", path: "/discrepancies" },
   { id: "releases", path: "/releases" },
   { id: "costs", path: "/costs" },

@@ -1,349 +1,372 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState, type ReactNode, type SyntheticEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   AppShell,
   DataTable,
   Masked,
+  REFUSAL,
+  RecordDrawer,
   SampleDocuments,
   ScenarioBanner,
   StatusPill,
+  businessDaysBetween,
+  formatDate,
   useActivity,
   useDemo,
   useDemoState,
-  type DataTableColumn,
+  type StatusTone,
 } from "@kit";
-import { LIENS_SEED, LIEN_NOTES, type Lien, type LienNote } from "../seed";
+import { NAV } from "../nav";
 import {
-  caseStageLabel,
-  caseStageTone,
+  BRAND,
+  EDGE_LIEN_ID,
+  LIENS_SEED,
+  NOTES_SEED,
+  PERSONA_NAME,
+  PERSONA_ROLE,
   daysLabel,
-  lienStatusLabel,
-  lienStatusTone,
-  shellProps,
+  stageLabel,
+  statusLabel,
   usd,
-} from "./shared";
+  type Lien,
+  type LienNote,
+} from "../seed";
 
-const EDGE_ID = "5208";
-const EDGE_LABEL = "Payment short of balance, no reduction on file";
+// The one sample this screen can read. The kit's drop zone knows every
+// sample in the demo, so the screen blocks the other screen's document
+// before the kit sees it.
+const OWN_SAMPLE = "reduction-letter-5208";
+
+function statusTone(status: Lien["lien_status"]): StatusTone {
+  if (status === "discrepancy") return "accent";
+  if (status === "release review") return "primary";
+  return "muted";
+}
+
+function daysTo(deadline: Date | null): number | null {
+  if (!deadline) return null;
+  return businessDaysBetween(new Date(), new Date(deadline));
+}
 
 export default function Discrepancies() {
-  const { logAction } = useActivity();
-  const { completed } = useDemo();
   const [liens, setLiens] = useDemoState<Lien[]>("liens", LIENS_SEED);
-  const [notes, setNotes] = useDemoState<LienNote[]>("lien-notes", LIEN_NOTES);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const detailRef = useRef<HTMLElement | null>(null);
+  const [notes, setNotes] = useDemoState<LienNote[]>("lienNotes", NOTES_SEED);
+  const [sampleApplied, setSampleApplied] = useDemoState<Record<string, boolean>>(
+    "discrepancies-sample-applied",
+    {}
+  );
+  const { completed } = useDemo();
+  const { logAction } = useActivity();
+  const [sampleError, setSampleError] = useState<string | null>(null);
+  const [params, setParams] = useSearchParams();
+  const openId = params.get("lien");
+  const setOpenId = (id: string | null) => setParams(id ? { lien: id } : {});
 
-  // The detail panel opens inline, above the table, so it never covers the
-  // table the visitor is working in. Bring it into view when it opens.
-  useEffect(() => {
-    if (selectedId && detailRef.current) {
-      detailRef.current.scrollIntoView({ block: "nearest" });
-    }
-  }, [selectedId]);
+  const rows = liens.filter((l) => l.lien_status === "discrepancy");
+  const selected = rows.find((l) => l.lien_id === openId) ?? null;
 
-  // Using the sample document completes the same action as the attach button.
-  // Keep the ledger consistent with the sample's stated result in that path too.
-  useEffect(() => {
-    if (!completed.has("attach-reduction-letter")) return;
-    setLiens((previous) => {
-      let changed = false;
-      const next = previous.map((row) => {
-        if (row.id !== EDGE_ID || row.discrepancy_reason === "Reduction requested, within floor") {
-          return row;
-        }
-        changed = true;
-        return {
-          ...row,
-          requested_reduction: row.lien_balance,
-          discrepancy_reason: "Reduction requested, within floor",
-        };
-      });
-      return changed ? next : previous;
-    });
-  }, [completed, setLiens]);
+  // The banner and the countdown follow what is actually open, not a fixed
+  // headline: once 5208 leaves this list the next most urgent lien takes over.
+  const edgeLive = rows.find((l) => l.lien_id === EDGE_LIEN_ID) ?? null;
+  const nextUrgent =
+    rows
+      .slice()
+      .sort((a, b) => (daysTo(a.disbursement_deadline) ?? 999) - (daysTo(b.disbursement_deadline) ?? 999))[0] ??
+    null;
+  const headline = edgeLive ?? nextUrgent;
+  const headlineDays = headline ? daysTo(headline.disbursement_deadline) : null;
+  const edgeLien = liens.find((l) => l.lien_id === EDGE_LIEN_ID);
 
-  const rows = liens.filter((lien) => lien.lien_status === "discrepancy");
-  const bannerLien = rows.find((lien) => lien.id === EDGE_ID) ?? rows[0];
-  const selected = selectedId
-    ? liens.find((lien) => lien.id === selectedId) ?? null
-    : null;
+  const bannerTitle = edgeLive
+    ? "Lien 5208: $6,200 paid on an $11,400 bill"
+    : headline
+      ? `Lien ${headline.lien_id}: ${headline.discrepancy_reason ?? "flagged for review"}`
+      : edgeLien?.lien_status === "released"
+        ? "Lien 5208 released"
+        : "No open discrepancies";
+  const bannerBody = edgeLive
+    ? "The attorney asks for a release before disbursing, but no signed reduction agreement is on file. Nothing is written off and no release goes out until Marcus reviews it."
+    : headline
+      ? `${headline.attorney_firm} posted ${usd(headline.payments_posted)} against a ${usd(
+          headline.billed_total
+        )} bill. ${
+          headlineDays === null
+            ? "No disbursement deadline is set."
+            : `${daysLabel(headlineDays)} left before the attorney disburses.`
+        } It is fixed before any release goes out.`
+      : edgeLien?.lien_status === "released"
+        ? "Marcus approved the reduction and the release went to the firm. Nothing was written off without that approval."
+        : "Every settled lien matches its payment and its closing statement.";
 
-  const columns: DataTableColumn<Lien>[] = [
-    {
-      key: "id",
-      header: "Lien",
-      render: (lien) => (
-        <div>
-          <p className="font-medium">Lien {lien.id}</p>
-          <p className="text-xs text-[var(--pf-muted)]">{lien.patient_name}</p>
-        </div>
-      ),
-    },
-    {
-      key: "attorney_firm",
-      header: "Referring firm",
-      render: (lien) => lien.attorney_firm,
-    },
-    {
-      key: "lien_holder",
-      header: "Lien holder",
-      render: (lien) => lien.lien_holder,
-    },
-    {
-      key: "discrepancy_reason",
-      header: "Reason",
-      render: (lien) => lien.discrepancy_reason,
-    },
-    {
-      key: "billed_total",
-      header: "Billed",
-      render: (lien) => usd(lien.billed_total),
-    },
-    {
-      key: "payments_posted",
-      header: "Payments posted",
-      render: (lien) => usd(lien.payments_posted),
-    },
-    {
-      key: "lien_balance",
-      header: "Balance",
-      render: (lien) => usd(lien.lien_balance),
-    },
-    {
-      key: "lien_status",
-      header: "Lien status",
-      render: (lien) => (
-        <StatusPill label={lienStatusLabel(lien.lien_status)} tone={lienStatusTone(lien.lien_status)} />
-      ),
-    },
-    {
-      key: "days_left",
-      header: "Disbursement",
-      render: (lien) => daysLabel(lien.disbursement_deadline),
-    },
-  ];
+  const addNote = (lienId: string, text: string) => {
+    const entry: LienNote = {
+      note_id: `LN-live-${Date.now()}`,
+      lien_id: lienId,
+      author: PERSONA_NAME,
+      timestamp: new Date(),
+      note_text: text,
+    };
+    setNotes((prev) => [entry, ...prev]);
+  };
+
+  const applyReductionLetter = (lien: Lien) => {
+    const requested = lien.lien_balance;
+    setLiens((prev) =>
+      prev.map((l) =>
+        l.lien_id === lien.lien_id
+          ? {
+              ...l,
+              requested_reduction: requested,
+              discrepancy_reason: "Reduction requested, within floor",
+            }
+          : l
+      )
+    );
+    addNote(
+      lien.lien_id,
+      `Attorney's reduction letter attached. Reduction of ${usd(requested)} requested.`
+    );
+  };
 
   const attachLetter = () => {
     if (!selected) return;
-    const reduction = selected.lien_balance;
-    setLiens((previous) =>
-      previous.map((row) =>
-        row.id === selected.id
-          ? {
-              ...row,
-              requested_reduction: reduction,
-              discrepancy_reason: "Reduction requested, within floor",
-            }
-          : row,
-      ),
-    );
-    const now = new Date();
-    setNotes((previous) => [
-      ...previous,
-      {
-        id: `note-attach-${selected.id}-${now.getTime()}`,
-        lien_id: selected.id,
-        author: "Marcus Odum",
-        timestamp: now,
-        note_text: `Reduction letter attached for ${usd(reduction)}; the offer is above the practice floor.`,
-      },
-    ]);
+    applyReductionLetter(selected);
+    setSampleApplied((prev) => ({ ...prev, "attach-reduction-letter": true }));
     logAction("Reduction letter attached to lien 5208", "attach-reduction-letter");
   };
 
+  // The sample document writes the same change as the button: reading the
+  // attorney's letter is what lets the lien move, whichever way it arrived.
+  useEffect(() => {
+    if (!completed.has("attach-reduction-letter") || sampleApplied["attach-reduction-letter"]) return;
+    const lien = liens.find((l) => l.lien_id === EDGE_LIEN_ID);
+    if (!lien) return;
+    applyReductionLetter(lien);
+    setSampleApplied((prev) => ({ ...prev, "attach-reduction-letter": true }));
+    logAction("Reduction letter attached to lien 5208", "attach-reduction-letter");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completed, sampleApplied, liens]);
+
   const moveToReleaseReview = () => {
     if (!selected) return;
-    setLiens((previous) =>
-      previous.map((row) =>
-        row.id === selected.id ? { ...row, lien_status: "release review" } : row,
-      ),
+    setLiens((prev) =>
+      prev.map((l) =>
+        l.lien_id === selected.lien_id ? { ...l, lien_status: "release review" } : l
+      )
     );
-    const now = new Date();
-    setNotes((previous) => [
-      ...previous,
-      {
-        id: `note-review-${selected.id}-${now.getTime()}`,
-        lien_id: selected.id,
-        author: "Marcus Odum",
-        timestamp: now,
-        note_text: "Moved to release review for approval.",
-      },
-    ]);
+    addNote(selected.lien_id, "Moved to release review for the coordinator's approval.");
     logAction("Lien moved to release review", "move-to-release-review");
-    setSelectedId(null);
+    setOpenId(null);
   };
 
+  const guardDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    const file = e.dataTransfer?.files?.[0];
+    if (file && file.name.toLowerCase() !== `${OWN_SAMPLE}.pdf`) {
+      e.preventDefault();
+      e.stopPropagation();
+      setSampleError(REFUSAL);
+    }
+  };
+
+  const guardPick = (e: SyntheticEvent<HTMLDivElement>) => {
+    const target = e.target as HTMLInputElement;
+    const file = target.files?.[0];
+    if (!file) return;
+    if (file.name.toLowerCase() !== `${OWN_SAMPLE}.pdf`) {
+      e.stopPropagation();
+      setSampleError(REFUSAL);
+      target.value = "";
+    } else {
+      setSampleError(null);
+    }
+  };
+
+  const drawerActions: ReactNode = (
+    <div className="flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={attachLetter}
+        data-action="attach-reduction-letter"
+        className="rounded-lg border border-[var(--pf-muted)]/30 px-4 py-2 text-sm"
+      >
+        Attach reduction letter
+      </button>
+      <button
+        type="button"
+        onClick={moveToReleaseReview}
+        data-action="move-to-release-review"
+        className="rounded-lg bg-[var(--pf-primary)] px-4 py-2 text-sm font-medium text-[var(--pf-surface)]"
+      >
+        Move to release review
+      </button>
+    </div>
+  );
+
   return (
-    <AppShell {...shellProps}>
+    <AppShell
+      brandName={BRAND.name}
+      brandUrl={BRAND.url}
+      brandEmail={BRAND.email}
+      personaName={PERSONA_NAME}
+      personaRole={PERSONA_ROLE}
+      nav={NAV}
+    >
       <h1 className="text-2xl" style={{ fontFamily: "var(--pf-font-heading)" }}>
         Discrepancies
       </h1>
-      <p className="mt-2 max-w-2xl text-[var(--pf-muted)]">
-        Settled liens whose payment, attorney or lien holder does not match the ledger, with the
-        days left before the attorney's disbursement deadline.
+      <p className="mt-1 max-w-3xl text-sm text-[var(--pf-muted)]">
+        Settled liens whose payment, attorney, lien holder or closing statement does not match the
+        ledger. Each one shows the reason and the days left before the attorney's disbursement
+        deadline.
       </p>
 
-      {bannerLien && (
-        <div className="mt-6">
-          <ScenarioBanner
-            dataTour="appeal-countdown"
-            title={bannerLien.discrepancy_reason || EDGE_LABEL}
-            body={`${bannerLien.patient_name} at ${bannerLien.attorney_firm}: ${usd(
-              bannerLien.payments_posted,
-            )} posted against ${usd(bannerLien.billed_total)}, leaving ${usd(
-              bannerLien.lien_balance,
-            )} open. ${daysLabel(bannerLien.disbursement_deadline)} before the attorney's disbursement deadline.`}
-          />
-        </div>
-      )}
+      <div className="mt-5 space-y-4">
+        <ScenarioBanner title={bannerTitle} body={bannerBody} />
 
-      <div className="mt-6">
-        <SampleDocuments screenId="discrepancies" />
-      </div>
-
-      {selected && (
-        <section
-          ref={detailRef}
-          aria-labelledby="lien-detail-heading"
-          className="mt-6 rounded-2xl border border-[var(--pf-primary)]/30 bg-[var(--pf-surface)] p-5 shadow-sm"
+        <div
+          data-tour="appeal-countdown"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--pf-muted)]/20 p-4"
         >
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <h2
-              id="lien-detail-heading"
-              className="text-lg"
-              style={{ fontFamily: "var(--pf-font-heading)" }}
-            >
-              Lien {selected.id} — {selected.patient_name}
-            </h2>
-            <button
-              type="button"
-              onClick={() => setSelectedId(null)}
-              className="rounded-lg border border-[var(--pf-muted)]/30 px-3 py-1.5 text-sm text-[var(--pf-muted)]"
-            >
-              Close
-            </button>
-          </div>
-
-          <div className="mt-4 space-y-4 text-sm">
-            <p className="rounded-lg bg-[var(--pf-accent)] px-3 py-2 text-[var(--pf-ink)]">
-              {selected.discrepancy_reason || EDGE_LABEL}
+          <div>
+            <p className="text-sm font-medium">
+              {headline ? `Lien ${headline.lien_id} disbursement deadline` : "Disbursement countdown"}
             </p>
-
-            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <div>
-                <dt className="text-[var(--pf-muted)]">Referring firm</dt>
-                <dd>{selected.attorney_firm}</dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Lien holder</dt>
-                <dd>{selected.lien_holder}</dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Case stage</dt>
-                <dd>
-                  <StatusPill
-                    label={caseStageLabel(selected.case_stage)}
-                    tone={caseStageTone(selected.case_stage)}
-                  />
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Lien status</dt>
-                <dd>
-                  <StatusPill
-                    label={lienStatusLabel(selected.lien_status)}
-                    tone={lienStatusTone(selected.lien_status)}
-                  />
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Billed total</dt>
-                <dd>{usd(selected.billed_total)}</dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Payments posted</dt>
-                <dd>{usd(selected.payments_posted)}</dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Open balance</dt>
-                <dd>{usd(selected.lien_balance)}</dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Requested reduction</dt>
-                <dd>
-                  {selected.requested_reduction === null
-                    ? "None on file"
-                    : usd(selected.requested_reduction)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Reduction floor</dt>
-                <dd>
-                  <Masked field="reduction_floor">{usd(selected.reduction_floor)}</Masked>
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Settlement reported</dt>
-                <dd>
-                  {selected.settlement_amount_reported === null
-                    ? "Not yet reported"
-                    : usd(selected.settlement_amount_reported)}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Payment posted</dt>
-                <dd>
-                  {selected.payment_posted_date
-                    ? selected.payment_posted_date.toLocaleDateString()
-                    : "No payment posted"}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-[var(--pf-muted)]">Disbursement deadline</dt>
-                <dd>{daysLabel(selected.disbursement_deadline)}</dd>
-              </div>
-              <div className="col-span-2 sm:col-span-3">
-                <dt className="text-[var(--pf-muted)]">Treatment summary</dt>
-                <dd>
-                  <Masked field="treatment_summary">{selected.treatment_summary}</Masked>
-                </dd>
-              </div>
-            </dl>
-
-            <div className="flex flex-wrap gap-2 border-t border-[var(--pf-muted)]/20 pt-4">
-              <button
-                type="button"
-                data-action="attach-reduction-letter"
-                onClick={attachLetter}
-                className="rounded-lg border border-[var(--pf-primary)] px-3 py-1.5 text-sm font-medium text-[var(--pf-primary)]"
-              >
-                Attach reduction letter
-              </button>
-              <button
-                type="button"
-                data-action="move-to-release-review"
-                onClick={moveToReleaseReview}
-                className="rounded-lg bg-[var(--pf-primary)] px-3 py-1.5 text-sm font-medium text-[var(--pf-surface)]"
-              >
-                Move to release review
-              </button>
-            </div>
+            <p className="mt-1 text-xs text-[var(--pf-muted)]">
+              {headline?.attorney_firm ?? "No lien is waiting on a deadline"}
+              {headline?.disbursement_deadline
+                ? ` — deadline ${formatDate(new Date(headline.disbursement_deadline))}`
+                : ""}
+            </p>
           </div>
-        </section>
-      )}
+          <p className="text-2xl" style={{ fontFamily: "var(--pf-font-heading)" }}>
+            {headlineDays === null ? "No deadline" : daysLabel(headlineDays)}
+          </p>
+        </div>
+      </div>
 
       <div className="mt-6">
         <DataTable
-          columns={columns}
+          columns={[
+            {
+              key: "lien_id",
+              header: "Lien and patient",
+              render: (row) => (
+                <span>
+                  <span className="font-medium">{row.patient_name}</span>
+                  <span className="block text-xs text-[var(--pf-muted)]">Lien {row.lien_id}</span>
+                  <span className="block text-xs text-[var(--pf-muted)]">{row.discrepancy_reason}</span>
+                </span>
+              ),
+            },
+            {
+              key: "attorney_firm",
+              header: "Law firm",
+              render: (row) => row.attorney_firm,
+            },
+            {
+              key: "lien_holder",
+              header: "Lien holder",
+              render: (row) => row.lien_holder,
+            },
+            {
+              key: "case_stage",
+              header: "Case stage",
+              render: (row) => stageLabel(row.case_stage),
+            },
+            {
+              key: "billed_total",
+              header: "Billed",
+              render: (row) => usd(row.billed_total),
+            },
+            {
+              key: "payments_posted",
+              header: "Payments",
+              render: (row) => usd(row.payments_posted),
+            },
+            {
+              key: "lien_balance",
+              header: "Balance",
+              render: (row) => usd(row.lien_balance),
+            },
+            {
+              key: "lien_status",
+              header: "Lien status",
+              render: (row) => <StatusPill label={statusLabel(row.lien_status)} tone={statusTone(row.lien_status)} />,
+            },
+            {
+              key: "deadline",
+              header: "Disbursement",
+              render: (row) => {
+                const days = daysTo(row.disbursement_deadline);
+                if (days === null) return <span className="text-[var(--pf-muted)]">No deadline</span>;
+                return <span>{daysLabel(days)} left</span>;
+              },
+            },
+          ]}
           rows={rows}
-          rowKey={(lien) => lien.id}
+          rowKey={(row) => row.lien_id}
+          onRowClick={(row) => setOpenId(row.lien_id)}
           dataTour="denial"
           mobileStatusKey="lien_status"
-          mobileUrgencyKey="days_left"
-          edgeCaseRow={(lien) => lien.id === EDGE_ID}
-          onRowClick={(lien) => setSelectedId(lien.id)}
+          mobileUrgencyKey="deadline"
+          edgeCaseRow={(row) => row.lien_id === EDGE_LIEN_ID}
         />
       </div>
+
+      <div className="mt-8" onDropCapture={guardDrop} onChangeCapture={guardPick}>
+        <SampleDocuments screenId="discrepancies" />
+        {sampleError && (
+          <p role="alert" className="mt-2 text-sm text-[var(--pf-ink)]">
+            {sampleError}
+          </p>
+        )}
+      </div>
+
+      <RecordDrawer
+        open={selected !== null}
+        title={selected ? `Lien ${selected.lien_id} — ${selected.patient_name}` : "Lien"}
+        onClose={() => setOpenId(null)}
+      >
+        {selected && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusPill label={statusLabel(selected.lien_status)} tone={statusTone(selected.lien_status)} />
+              <StatusPill label={stageLabel(selected.case_stage)} tone="muted" />
+            </div>
+            <p className="rounded-lg bg-[var(--pf-accent)] px-3 py-2 text-sm text-[var(--pf-ink)]">
+              {selected.discrepancy_reason}
+            </p>
+            <dl className="grid grid-cols-2 gap-3 text-sm">
+              <div><dt className="text-[var(--pf-muted)]">Law firm</dt><dd>{selected.attorney_firm}</dd></div>
+              <div><dt className="text-[var(--pf-muted)]">Lien holder</dt><dd>{selected.lien_holder}</dd></div>
+              <div><dt className="text-[var(--pf-muted)]">Billed total</dt><dd>{usd(selected.billed_total)}</dd></div>
+              <div><dt className="text-[var(--pf-muted)]">Payments posted</dt><dd>{usd(selected.payments_posted)}</dd></div>
+              <div><dt className="text-[var(--pf-muted)]">Lien balance</dt><dd>{usd(selected.lien_balance)}</dd></div>
+              <div>
+                <dt className="text-[var(--pf-muted)]">Requested reduction</dt>
+                <dd>{selected.requested_reduction ? usd(selected.requested_reduction) : "None on file"}</dd>
+              </div>
+              <div>
+                <dt className="text-[var(--pf-muted)]">Practice floor</dt>
+                <dd><Masked field="reduction_floor">{usd(selected.reduction_floor)}</Masked></dd>
+              </div>
+              <div>
+                <dt className="text-[var(--pf-muted)]">Disbursement</dt>
+                <dd>
+                  {selected.disbursement_deadline
+                    ? daysLabel(daysTo(selected.disbursement_deadline) ?? 0)
+                    : "None set"}
+                </dd>
+              </div>
+            </dl>
+            <div>
+              <p className="text-sm font-medium">Treatment summary</p>
+              <p className="mt-1 text-sm text-[var(--pf-muted)]"><Masked field="treatment_summary">{selected.treatment_summary}</Masked></p>
+            </div>
+            {drawerActions}
+          </div>
+        )}
+      </RecordDrawer>
     </AppShell>
   );
 }
